@@ -6,7 +6,7 @@ import * as D from './data'
 const KEY = 'trust-game-v1'
 const load = () => { try { return JSON.parse(sessionStorage.getItem(KEY)) || null } catch { return null } }
 const save = (s) => { try { sessionStorage.setItem(KEY, JSON.stringify(s)) } catch { /* 저장 못 해도 진행 */ } }
-const blank = () => ({ screen: 'start', num: '', theme: 'sport', predict: null, results: {}, order: [], cleared: null, reflect: { hard: null, best: '', pledge: null, own: '' } })
+const blank = () => ({ screen: 'start', num: '', theme: 'sport', predict: null, results: {}, order: [], quiz: null, cleared: null, reflect: { hard: null, best: '', pledge: null, own: '' } })
 
 const hasJong = (s) => { const c = s.charCodeAt(s.length - 1) - 0xac00; return c >= 0 && c % 28 !== 0 }
 const nick = (f) => (hasJong(f.name) ? f.name + '이' : f.name) // 도윤 → 도윤이
@@ -14,7 +14,7 @@ const wa = (s) => s + (hasJong(s) ? '과' : '와')
 const byId = (id) => D.FRIENDS.find((f) => f.id === id)
 
 // 늘 함께를 골랐을 때가 우리 팀 최고 점수
-const bestTeam = (f) => { const h = []; let t = 0; for (let i = 0; i < D.ROUNDS; i++) { const you = f.move(h); const [a, b] = D.PAY['C' + you]; t += a + b; h.push({ me: 'C', you }) } return t }
+const bestTeam = (f) => { const h = []; let t = 0; for (let i = 0; i < D.ROUNDS; i++) { const you = f.move(h, true); const [a, b] = D.PAY['C' + you]; t += a + b; h.push({ me: 'C', you }) } return t }
 const MAX = D.FRIENDS.reduce((a, f) => a + bestTeam(f), 0)
 
 const fireConfetti = (big) => {
@@ -122,7 +122,7 @@ function Rules({ s, set }) {
             ))}
           </div>
           <p className="sub tc">앞 숫자가 <b className="me">내 점수</b>, 뒤 숫자가 친구 점수예요. 둘을 더한 것이 <b className="gold">우리 팀 점수</b>예요.</p>
-          <div className="goal"><span>🏆</span><p>목표는 내 점수가 아니라 <b>우리 팀 점수</b>를 가장 많이 모으는 거예요. 친구 다섯 명과 각각 {D.ROUNDS}라운드씩 경기해요.</p></div>
+          <div className="goal"><span>🏆</span><p>목표는 내 점수가 아니라 <b>우리 팀 점수</b>를 가장 많이 모으는 거예요. 친구 다섯 명과 각각 {D.ROUNDS}라운드씩 경기하고, 중간에 {t.talkName}도 있어요. 마지막 STAGE 6은 우리 반 상황 퀴즈예요.</p></div>
           <Btn className="wide" onClick={() => setStep(1)}>알겠어요, 다음 →</Btn>
         </div>
       )}
@@ -145,8 +145,11 @@ function Rules({ s, set }) {
   )
 }
 
-// ───────────────── 경기장 지도
-const PTS = [[12, 80], [34, 64], [22, 36], [50, 22], [74, 40], [87, 17]] // % 좌표 (마지막은 시상대)
+// ───────────────── 경기장 지도 (친구 5명 + 상황 퀴즈 + 시상대)
+const NF = D.FRIENDS.length // 5
+const QI = NF // 퀴즈 스테이지 칸
+const PI = NF + 1 // 시상대 칸
+const PTS = [[10, 82], [30, 68], [19, 40], [42, 22], [63, 44], [79, 72], [90, 24]] // % 좌표
 // 곡선 경로를 구간별로 만들어 두고, 지나온 구간만 이어 그린다
 function segments(pts) {
   const p = pts.map(([x, y]) => [x * 10, y * 6.2])
@@ -161,11 +164,12 @@ function segments(pts) {
 }
 const SEG = segments(PTS)
 const curve = (k) => SEG.start + SEG.segs.slice(0, k).join('')
+const progress = (s) => s.order.filter((id) => s.results[id]).length + (s.quiz ? 1 : 0)
 
 function MapScreen({ s, set }) {
   const t = D.THEMES[s.theme]
   const done = s.order.filter((id) => s.results[id])
-  const n = done.length
+  const n = progress(s)
   const [banner, setBanner] = useState(s.cleared)
   const from = banner != null ? Math.max(0, n - 1) : n
   const [pos, setPos] = useState(from)
@@ -177,15 +181,23 @@ function MapScreen({ s, set }) {
     set({ cleared: null }, true)
     return () => { clearTimeout(a); clearTimeout(b) }
   }, []) // eslint-disable-line
-  const cleared = banner != null ? byId(banner) : null
-  const full = curve(5)
-  const partial = curve(Math.min(pos, 5))
-  const go = (i) => { if (i === n && n < 5) set({ screen: 'draw' }); if (i === 5 && n === 5) set({ screen: 'final' }) }
+  const isQuizBanner = banner === 'quiz'
+  const cleared = banner != null && !isQuizBanner ? byId(banner) : null
+  const full = curve(PI)
+  const partial = curve(Math.min(pos, PI))
+  const go = (i) => {
+    if (i !== n) return
+    if (n < NF) set({ screen: 'draw' })
+    else if (n === QI) set({ screen: 'quiz' })
+    else if (n === PI) set({ screen: 'final' })
+  }
+  const head = n < NF ? `STAGE ${n + 1} · 다음 친구를 만나러 가요` : n === QI ? 'STAGE 6 · 마지막 관문, 우리 반 상황 퀴즈!' : '모든 스테이지를 마쳤어요! 시상대로 가요'
+  const cta = n < NF ? `STAGE ${n + 1} 시작 · 친구 카드 뽑기 🃏` : n === QI ? 'STAGE 6 시작 · 상황 퀴즈 🧩' : '어울림 시상대로 🏆'
 
   return (
     <motion.div className="stack" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
       <div className="maphead">
-        <div><p className="eyebrow">{t.place} 투어</p><h2>{n < 5 ? `STAGE ${n + 1} · 다음 친구를 만나러 가요` : '모든 경기를 마쳤어요! 시상대로 가요'}</h2></div>
+        <div><p className="eyebrow">{t.place} 투어</p><h2>{head}</h2></div>
       </div>
       <div className="map">
         <svg viewBox="0 0 1000 620" preserveAspectRatio="none" className="pitch" aria-hidden="true">
@@ -205,36 +217,89 @@ function MapScreen({ s, set }) {
             initial={{ pathLength: (pos - 1) / pos }} animate={{ pathLength: 1 }} transition={{ duration: 1.1, ease: 'easeInOut' }} />}
         </svg>
         {PTS.map(([x, y], i) => {
-          const last = i === 5
-          const f = !last && done[i] ? byId(done[i]) : null
-          const state = last ? (n === 5 ? 'current' : 'locked') : i < n ? 'done' : i === n ? 'current' : 'locked'
+          const podium = i === PI, quiz = i === QI
+          const f = i < NF && done[i] ? byId(done[i]) : null
+          const state = i < n ? 'done' : i === n ? 'current' : 'locked'
+          const label = podium ? '어울림 시상대' : quiz ? (s.quiz ? '상황 퀴즈 완주' : 'STAGE 6 퀴즈') : f ? f.badge : `STAGE ${i + 1}`
+          const disc = podium ? '🏆' : quiz ? (state === 'locked' ? '🔒' : '🧩') : f ? <Avatar f={f} size={50} /> : state === 'locked' ? '🔒' : i + 1
           return (
-            <motion.button key={i} className={`node ${state} ${last ? 'podium' : ''}`} style={{ left: `${x}%`, top: `${y}%` }} onClick={() => go(i)}
-              initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.1 + i * 0.08, type: 'spring' }} aria-label={last ? '어울림 시상대' : `스테이지 ${i + 1}`}>
-              <span className="disc">{last ? '🏆' : f ? <Avatar f={f} size={50} /> : state === 'locked' ? '🔒' : i + 1}</span>
-              <span className="nlabel">{last ? '어울림 시상대' : f ? f.badge : `STAGE ${i + 1}`}</span>
+            <motion.button key={i} className={`node ${state} ${podium ? 'podium' : ''} ${quiz ? 'quiz' : ''}`} style={{ left: `${x}%`, top: `${y}%` }} onClick={() => go(i)}
+              initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.1 + i * 0.08, type: 'spring' }} aria-label={label}>
+              <span className="disc">{disc}</span>
+              <span className="nlabel">{label}</span>
             </motion.button>
           )
         })}
         <motion.div className="token" initial={false}
-          animate={{ left: `${PTS[Math.min(pos, 5)][0]}%`, top: `${PTS[Math.min(pos, 5)][1]}%` }}
+          animate={{ left: `${PTS[Math.min(pos, PI)][0]}%`, top: `${PTS[Math.min(pos, PI)][1]}%` }}
           transition={{ duration: 1.1, ease: 'easeInOut' }}>
           <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 0.9, repeat: Infinity }}><Jersey num={s.num} size={52} /></motion.div>
         </motion.div>
         <AnimatePresence>
-          {cleared && (
+          {(cleared || (isQuizBanner && banner != null)) && (
             <motion.div className="clear" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <motion.div initial={{ scale: 0.3, rotate: -8 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 200, damping: 12 }} className="clear-in">
                 <p>STAGE {n} CLEAR!</p>
-                <div className="badge"><Avatar f={cleared} size={44} /><b>{cleared.badge}</b></div>
+                <div className="badge">{cleared ? <Avatar f={cleared} size={44} /> : <span className="bicon">🧩</span>}<b>{cleared ? cleared.badge : '상황 퀴즈 완주'}</b></div>
               </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
       <div className="center">
-        <Btn className="big" onClick={() => go(n)}>{n < 5 ? `STAGE ${n + 1} 시작 · 친구 카드 뽑기 🃏` : '어울림 시상대로 🏆'}</Btn>
+        <Btn className="big" onClick={() => go(n)}>{cta}</Btn>
       </div>
+    </motion.div>
+  )
+}
+
+// ───────────────── STAGE 6 우리 반 상황 퀴즈
+function Quiz({ s, set }) {
+  const [i, setI] = useState(0)
+  const [pick, setPick] = useState(null)
+  const [tries, setTries] = useState(0)
+  const [first, setFirst] = useState(0) // 한 번에 고른 문제 수(점수 아님, 결과 문장에만 사용)
+  const q = D.QUIZ[i]
+  const f = byId(q.from)
+  const ok = pick === q.a
+  const choose = (k) => {
+    if (ok) return
+    setPick(k)
+    if (k === q.a) { if (tries === 0) setFirst((v) => v + 1); fireConfetti(false) } else setTries((v) => v + 1)
+  }
+  const next = () => {
+    if (i < D.QUIZ.length - 1) { setI(i + 1); setPick(null); setTries(0); return }
+    set({ screen: 'map', quiz: { first }, cleared: 'quiz' })
+  }
+  return (
+    <motion.div className="stack" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <div className="row between">
+        <div><p className="eyebrow">STAGE 6 · 우리 반 상황 퀴즈</p><h2>오늘 만난 친구들에게 배운 것을 우리 반에 써 봐요</h2></div>
+        <div className="dots">{D.QUIZ.map((_, k) => <span key={k} className={`dot ${k < i ? 'cc' : k === i ? 'now' : ''}`}>{k + 1}</span>)}</div>
+      </div>
+      <AnimatePresence mode="wait">
+        <motion.div key={i} className="card stack qcard" initial={{ rotateY: -90, opacity: 0 }} animate={{ rotateY: 0, opacity: 1 }} exit={{ rotateY: 90, opacity: 0 }} transition={{ duration: 0.45 }}>
+          <div className="qhead"><Avatar f={f} size={48} /><p className="qtext">{q.q}</p></div>
+          <div className="qopts">
+            {q.opts.map((o, k) => {
+              const cls = pick === k ? (k === q.a ? 'right' : 'wrong') : ok && k === q.a ? 'right' : ''
+              return (
+                <motion.button key={k} className={`qopt ${cls}`} onClick={() => choose(k)} disabled={ok}
+                  animate={pick === k && k !== q.a ? { x: [0, -10, 10, -6, 6, 0] } : {}} transition={{ duration: 0.4 }}>
+                  <span className="qk">{'ABC'[k]}</span>{o}
+                </motion.button>
+              )
+            })}
+          </div>
+          {pick != null && !ok && <motion.p className="note" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>음… 그렇게 하면 친구 마음이 어떨까요? 다른 답을 골라 보세요.</motion.p>}
+          {ok && (
+            <motion.div className="outcome good" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+              <div><b>좋은 선택이에요!</b><p>{q.why}</p></div>
+              <Btn onClick={next}>{i < D.QUIZ.length - 1 ? '다음 상황 →' : 'STAGE 6 CLEAR! 지도로 →'}</Btn>
+            </motion.div>
+          )}
+        </motion.div>
+      </AnimatePresence>
     </motion.div>
   )
 }
@@ -302,13 +367,16 @@ function Match({ s, set }) {
   const [phase, setPhase] = useState('choose') // choose | count | reveal
   const [count, setCount] = useState(3)
   const [warned, setWarned] = useState(false)
+  const [talk, setTalk] = useState(null) // 작전 타임에서 고른 말
+  const card = useMemo(() => (h.length >= D.TALK_AT ? D.talkCard(f, h.slice(0, D.TALK_AT), t) : null), [h.length >= D.TALK_AT]) // eslint-disable-line
   const my = h.reduce((a, x) => a + x.a, 0), ur = h.reduce((a, x) => a + x.b, 0)
   const last = h[h.length - 1]
-  const round = phase === 'choose' ? h.length : h.length - 1
+  const round = phase === 'choose' ? h.length : phase === 'talk' ? h.length - 1 : h.length - 1
+  const sayTalk = (o) => { setTalk(o); setTrust((v) => Math.max(0, Math.min(100, v + o.d))); if (o.kind === 'good') fireConfetti(false) }
 
   const play = (me) => {
     if (phase !== 'choose') return
-    const you = f.move(h)
+    const you = f.move(h, talk?.kind === 'good')
     const [a, b] = D.PAY[me + you]
     const nh = [...h, { me, you, a, b, say: D.bubble(f, me, you) }]
     setPhase('count'); setCount(3)
@@ -321,8 +389,9 @@ function Match({ s, set }) {
     }, 1140)
   }
   const next = () => {
+    if (h.length === D.TALK_AT && !talk) { setPhase('talk'); return }
     if (h.length < D.ROUNDS) { setPhase('choose'); return }
-    const res = { my, ur, trust, moves: h.map((x) => x.me + x.you).join(' ') }
+    const res = { my, ur, trust, moves: h.map((x) => x.me + x.you).join(' '), talk: talk?.kind || 'none' }
     set({ screen: 'stageEnd', results: { ...s.results, [f.id]: res } })
   }
   const o = last && phase === 'reveal' ? D.outcomeText(t, last.me, last.you) : null
@@ -351,6 +420,9 @@ function Match({ s, set }) {
           <div className="rel">
             <Avatar f={f} size={54} mood={mood} />
             <AnimatePresence>
+              {phase === 'talk' && talk && (
+                <motion.div key="talk" className="speech" initial={{ opacity: 0, scale: 0.4, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ type: 'spring' }}>{talk.reply}</motion.div>
+              )}
               {phase === 'reveal' && last && (
                 <motion.div key={h.length} className="speech" initial={{ opacity: 0, scale: 0.4, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ delay: 0.5, type: 'spring' }}>{last.say}</motion.div>
               )}
@@ -365,7 +437,30 @@ function Match({ s, set }) {
         <b>{trust}%</b>
       </div>
 
-      <div className="arena card">
+      <AnimatePresence>
+        {phase === 'talk' && card && (
+          <motion.div className="talk card stack" initial={{ opacity: 0, scale: 0.85, rotateX: 30 }} animate={{ opacity: 1, scale: 1, rotateX: 0 }} exit={{ opacity: 0 }} transition={{ type: 'spring', stiffness: 140, damping: 14 }}>
+            <motion.p className="talk-title" initial={{ scale: 1.6 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200 }}>{t.talkIcon} {t.talkName}!</motion.p>
+            <p className="tc"><b>{card.lead}</b></p>
+            <div className="talk-opts">
+              {card.opts.map((o, i) => (
+                <motion.button key={i} whileTap={{ scale: 0.97 }} className={`talk-opt ${talk === o ? 'on ' + o.kind : ''}`} disabled={!!talk} onClick={() => sayTalk(o)}
+                  initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.25 + i * 0.12 }}>
+                  <span>{o.kind === 'none' ? '🤐' : '💬'}</span>{o.kind === 'none' ? o.say : `"${o.say}"`}
+                </motion.button>
+              ))}
+            </div>
+            {talk && (
+              <motion.div className={`outcome ${talk.kind === 'good' ? 'good' : talk.kind === 'bad' ? 'warn' : 'flat'}`} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+                <div><b>{talk.kind === 'good' ? '믿음이 올라갔어요!' : talk.kind === 'bad' ? '믿음이 내려갔어요' : '아무 일도 일어나지 않았어요'}</b><p>{talk.fb} <span className="pts">(믿음 {talk.d > 0 ? '+' : ''}{talk.d})</span></p></div>
+                <Btn onClick={() => setPhase('choose')}>{t.talkName} 끝! {D.TALK_AT + 1}라운드로 →</Btn>
+              </motion.div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {phase !== 'talk' && <div className="arena card">
         <p className="scene">ROUND {round + 1} · {t.scene[round]}</p>
         <div className="slots">
           {['me', 'you'].map((w) => {
@@ -402,11 +497,11 @@ function Match({ s, set }) {
             <motion.div key={'r' + h.length} className={`outcome ${o.tone}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
               <div><b>{o.title}</b><p>{o.text} <span className="pts">(나 +{last.a} · {f.name} +{last.b})</span></p></div>
               {showKindNote && <p className="note">💭 {nick(f)}는 이번에도 나를 믿고 {t.C}를 골랐어요. 내 점수는 올랐지만 {nick(f)} 마음은 어떨까요?</p>}
-              <Btn onClick={() => { if (showKindNote) setWarned(true); next() }}>{h.length < D.ROUNDS ? '다음 라운드 →' : '경기 끝! 결과 보기'}</Btn>
+              <Btn onClick={() => { if (showKindNote) setWarned(true); next() }}>{h.length === D.TALK_AT && !talk ? `${t.talkIcon} ${t.talkName}!` : h.length < D.ROUNDS ? '다음 라운드 →' : '경기 끝! 결과 보기'}</Btn>
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </div>}
     </motion.div>
   )
 }
@@ -497,6 +592,7 @@ function Final({ s, set, reset }) {
     `[신뢰 게임 결과] ${s.num ? s.num + '번' : '번호 없음'} · ${t.label}`,
     `우리 팀 점수 ${team}/${MAX}점 (내 점수 ${my}) · 내가 함께를 고른 라운드 ${cCount}/${allMoves.length}`,
     `친구별: ${rows.map((x) => `${x.f.name} ${x.r.my + x.r.ur}점(믿음 ${x.r.trust}%)`).join(', ')}`,
+    `${t.talkName}에 건넨 따뜻한 말: ${rows.filter((x) => x.r.talk === 'good').length}/${rows.length}번 · 상황 퀴즈 ${s.quiz ? D.QUIZ.length + '문항 완주' : '-'}`,
     `경기 전 예측: ${pre ? pre.label : '-'}`,
     `함께를 고르기 어려웠던 때: ${rf.hard || '-'}`,
     `내가 가장 잘한 선택: ${rf.best.trim() || '-'}`,
@@ -515,7 +611,7 @@ function Final({ s, set, reset }) {
         <motion.div className="trophy" initial={{ y: -80, scale: 0.4, opacity: 0 }} animate={{ y: 0, scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 120, damping: 10 }}>🏆</motion.div>
         <p className="eyebrow">어울림 시상대</p>
         <div className="huge"><CountUp to={team} dur={1.8} /><small> / {MAX}</small></div>
-        <p>우리 팀 점수 · 내 점수 {my} · 함께를 고른 라운드 {cCount}/{allMoves.length}</p>
+        <p>우리 팀 점수 · 내 점수 {my} · 함께를 고른 라운드 {cCount}/{allMoves.length} · {t.talkName} 따뜻한 말 {rows.filter((x) => x.r.talk === 'good').length}/{rows.length}</p>
         <div className="bars">
           {rows.map(({ f, r }, i) => (
             <div key={f.id} className="barrow">
@@ -570,8 +666,8 @@ function Teacher({ close, theme }) {
         <h3>수업 흐름 (약 40분, 1인 1태블릿)</h3>
         <ol className="flow">
           <li><b>도입 5분</b> 규칙 화면을 함께 보고, 학생마다 "어떻게 해야 팀 점수가 가장 높을까?"를 예측해요.</li>
-          <li><b>전개 25분</b> 카드를 뽑아 다섯 친구와 5라운드씩 경기해요. 스테이지가 끝날 때마다 친구 마음을 짐작하고 비밀 규칙을 확인해요.</li>
-          <li><b>정리 10분</b> 시상대 화면에서 예측과 결과를 비교하고, 성찰 세 문항을 쓴 뒤 결과를 복사해 패들렛에 올려요.</li>
+          <li><b>전개 27분</b> 카드를 뽑아 다섯 친구와 {D.ROUNDS}라운드씩 경기해요. {D.TALK_AT}라운드가 끝나면 {t.talkName}에서 친구에게 건넬 한마디를 골라요(따뜻한 말은 믿음을 올리고, 마음 닫은 태민·서운한 민재의 마음을 더 빨리 열어요). 스테이지가 끝날 때마다 친구 마음을 짐작하고 비밀 규칙을 확인해요. 마지막 STAGE 6은 오늘 배운 것을 우리 반 상황에 적용하는 퀴즈 5문항이에요.</li>
+          <li><b>정리 8분</b> 시상대 화면에서 예측과 결과를 비교하고, 성찰 세 문항을 쓴 뒤 결과를 복사해 패들렛에 올려요.</li>
         </ol>
         <h3>점수 규칙</h3>
         <table className="tpay"><thead><tr><th></th><th>친구 {t.C}</th><th>친구 {t.D}</th></tr></thead>
@@ -584,6 +680,7 @@ function Teacher({ close, theme }) {
           <li>도윤이처럼 늘 믿어 주는 친구를 이용하면 어떤 일이 생길까요? 교실에서는 어떤 모습일까요?</li>
           <li>지후의 실수를 일부러 한 것으로 생각했다면, 그다음 라운드는 어땠나요? 실수와 일부러를 어떻게 구별할 수 있을까요?</li>
           <li>마음 닫은 태민이에게 손해를 보면서도 다가간 사람이 있나요? 그때 어떤 마음이었나요?</li>
+          <li>{t.talkName}에 어떤 말을 골랐나요? 같은 상황에서 한 말 한마디가 친구의 선택을 어떻게 바꿨나요?</li>
           <li>우리 반에서 '{t.C}'가 필요한 순간은 언제일까요?</li>
         </ul>
         <p className="sub">개인정보와 저장: 이름은 받지 않고, 번호는 화면 표시에만 써요. 서버·데이터베이스가 없어 기록은 탭을 닫으면 사라져요. 제출은 결과 복사 → 패들렛으로 해요.</p>
@@ -602,7 +699,7 @@ export default function App() {
   const reset = () => { const b = blank(); b.num = s.num; b.theme = s.theme; save(b); setS(b) }
   const doneN = Object.keys(s.results).length
   const team = Object.values(s.results).reduce((a, r) => a + r.my + r.ur, 0)
-  const views = { start: Start, rules: Rules, map: MapScreen, draw: Draw, match: Match, stageEnd: StageEnd, final: Final }
+  const views = { start: Start, rules: Rules, map: MapScreen, draw: Draw, match: Match, stageEnd: StageEnd, quiz: Quiz, final: Final }
   const View = views[s.screen] || Start
   return (
     <>
@@ -612,7 +709,7 @@ export default function App() {
           <header className="hud">
             <button className="brand" onClick={() => set({ screen: 'map' })} disabled={s.screen === 'rules' || s.screen === 'match'}><span className="logo">{D.THEMES[s.theme].icon}</span>신뢰 게임</button>
             <div className="pills">
-              <span className="pill">스테이지 {Math.min(doneN, 5)}/5</span>
+              <span className="pill">스테이지 {progress(s)}/{PI}</span>
               {s.screen !== 'match' && <span className="pill gold">우리 팀 {team}점</span>}
               <button className="pill ghost" onClick={() => setTeacher(true)}>선생님용</button>
             </div>

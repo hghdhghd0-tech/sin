@@ -260,3 +260,27 @@ h2 em{font-style:normal;color:var(--gold)}
   .node.podium .disc{width:50px;height:50px;font-size:24px}
   .node.podium .nlabel{display:none}
 }
+
+/* 작전 타임 */
+.talk{background:linear-gradient(160deg,rgba(167,139,250,.22),rgba(28,36,90,.7));box-shadow:inset 0 0 0 2px rgba(167,139,250,.6),0 0 40px rgba(167,139,250,.2),0 22px 44px rgba(0,0,0,.28)}
+.talk-title{text-align:center;font-size:clamp(28px,5vw,40px);font-weight:950;color:var(--gold);text-shadow:0 0 22px rgba(252,211,77,.6)}
+.talk-opts{display:flex;flex-direction:column;gap:10px}
+.talk-opt{display:flex;align-items:center;gap:12px;text-align:left;padding:16px 18px;border-radius:16px;background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 1px var(--stroke);font-weight:700;font-size:16.5px;min-height:56px}
+.talk-opt span{font-size:24px}
+.talk-opt:disabled:not(.on){opacity:.4}
+.talk-opt.on.good{background:rgba(52,211,153,.18);box-shadow:inset 0 0 0 2px var(--mint)}
+.talk-opt.on.bad{background:rgba(251,113,133,.15);box-shadow:inset 0 0 0 2px var(--pink)}
+.talk-opt.on.none{background:rgba(255,255,255,.1);box-shadow:inset 0 0 0 2px var(--sub)}
+/* 상황 퀴즈 */
+.qcard{perspective:1000px}
+.qhead{display:flex;gap:14px;align-items:center}
+.qtext{font-size:19px;font-weight:800;line-height:1.45;min-width:0}
+.qopts{display:flex;flex-direction:column;gap:10px}
+.qopt{display:flex;align-items:center;gap:12px;text-align:left;padding:15px 18px;border-radius:16px;background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 1px var(--stroke);font-weight:700;font-size:16.5px;min-height:56px}
+.qk{flex:none;width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:rgba(255,255,255,.1);font-weight:900;color:var(--gold)}
+.qopt.right{background:rgba(52,211,153,.18);box-shadow:inset 0 0 0 2px var(--mint),0 0 22px rgba(52,211,153,.3)}
+.qopt.wrong{background:rgba(251,113,133,.14);box-shadow:inset 0 0 0 2px var(--pink)}
+.qopt:disabled:not(.right){opacity:.45}
+.node.quiz.current .disc,.node.quiz.done .disc{background:linear-gradient(180deg,#C4B5FD,#8B5CF6);color:#fff}
+.node.quiz.done .disc{box-shadow:0 0 0 3px var(--gold),0 0 20px rgba(252,211,77,.6)}
+.bicon{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-size:24px;background:linear-gradient(180deg,#C4B5FD,#8B5CF6)}
